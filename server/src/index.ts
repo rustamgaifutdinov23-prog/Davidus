@@ -40,6 +40,7 @@ io.on('connection', (socket) => {
   // ---------- Lobby ----------
 
   socket.on('createRoom', (data: { name: string; faction: FactionId }, callback) => {
+    console.log(`[Davidus] createRoom from socket ${socket.id}, name=${data.name}`)
     const roomId = generateRoomCode()
     const room = new GameRoom(roomId, io)
     rooms.set(roomId, room)
@@ -50,22 +51,25 @@ io.on('connection', (socket) => {
   })
 
   socket.on('joinRoom', (data: { roomId: string; name: string; faction: FactionId }, callback) => {
+    console.log(`[Davidus] joinRoom from socket ${socket.id}, room=${data.roomId}, name=${data.name}`)
     const room = rooms.get(data.roomId.toUpperCase())
     if (!room) return callback({ ok: false, error: 'Room not found' })
     if (room.playerCount >= room.maxPlayers) return callback({ ok: false, error: 'Room full' })
     room.addPlayer(socket, data.name, data.faction)
     currentRoomId = data.roomId.toUpperCase()
     console.log(`[Davidus] ${data.name} joined room ${currentRoomId}`)
-    // Notify others
     socket.to(currentRoomId).emit('playerJoined', { playerId: socket.id, name: data.name, faction: data.faction })
     callback({ ok: true, roomId: currentRoomId, gameState: room.getPublicState() })
   })
 
   socket.on('startGame', (callback: (r: { ok: boolean; error?: string }) => void) => {
+    console.log(`[Davidus] startGame from socket ${socket.id}, room=${currentRoomId}`)
     if (!currentRoomId) return callback({ ok: false, error: 'Not in a room' })
     const room = rooms.get(currentRoomId)
     if (!room) return callback({ ok: false, error: 'Room gone' })
     if (room.playerCount < 2) return callback({ ok: false, error: 'Need at least 2 players' })
+    const playerIds = Object.keys(room.getPublicState().players)
+    console.log(`[Davidus] gameStarted emitting to room ${currentRoomId}, players: [${playerIds.join(', ')}]`)
     room.startGame()
     callback({ ok: true })
   })

@@ -72,7 +72,8 @@ export class LobbyUI {
     }
 
     this.net.onGameStarted = ({ gameState }) => {
-      console.log('[Lobby] gameStarted received, myId:', this.net.playerId, 'inPlayers:', !!gameState?.players?.[this.net.playerId])
+      console.log('[Lobby] gameStarted received, inRoom:', this.inRoom, 'myId:', this.net.playerId, 'inPlayers:', !!gameState?.players?.[this.net.playerId])
+      if (!this.inRoom) return
       if (!gameState?.players?.[this.net.playerId]) return
       document.getElementById('lobby')!.style.display = 'none'
       this.onGameReady()
