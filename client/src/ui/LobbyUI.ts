@@ -13,7 +13,9 @@ export class LobbyUI {
   }
 
   private render() {
-    document.getElementById('lobby')!.innerHTML = `
+    const lobbyEl = document.getElementById('lobby')!
+    lobbyEl.style.display = 'flex'
+    lobbyEl.innerHTML = `
       <div class="lobby-box">
         <h1 class="game-title">DAVIDUS</h1>
         <p class="subtitle">Asian War Strategy</p>

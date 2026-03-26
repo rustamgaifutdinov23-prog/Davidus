@@ -8,9 +8,3 @@ const lobby = new LobbyUI(game.network)
 lobby.onGameReady = () => {
   game.start()
 }
-
-// Override onGameStarted to also start game loop
-const origOnGameStarted = game.network.onGameStarted.bind(game.network)
-game.network.onGameStarted = (data) => {
-  origOnGameStarted(data)
-}
