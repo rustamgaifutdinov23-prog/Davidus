@@ -1,5 +1,5 @@
-import type { GameState, UnitData } from '../../../shared/types.js'
-import { UNIT_STATS, TERRAIN_DEFENSE_BONUS, COMBAT_RANDOM_RANGE, ATTACK_COOLDOWN_MS } from '../../../shared/constants.js'
+import type { GameState, UnitData } from '../../../shared/types'
+import { UNIT_STATS, TERRAIN_DEFENSE_BONUS, COMBAT_RANDOM_RANGE, ATTACK_COOLDOWN_MS } from '../../../shared/constants'
 
 const lastAttackTime: Map<string, number> = new Map()
 

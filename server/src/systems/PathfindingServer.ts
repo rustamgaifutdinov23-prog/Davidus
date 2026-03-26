@@ -1,6 +1,6 @@
 import PF from 'pathfinding'
-import type { MapData, TileData, UnitType } from '../../../shared/types.js'
-import { INFANTRY_ONLY_TERRAIN } from '../../../shared/constants.js'
+import type { MapData, TileData, UnitType } from '../../../shared/types'
+import { INFANTRY_ONLY_TERRAIN } from '../../../shared/constants'
 
 export function findPath(
   map: MapData,

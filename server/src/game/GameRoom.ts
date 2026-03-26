@@ -3,19 +3,19 @@ import { v4 as uuidv4 } from 'uuid'
 import type {
   GameState, PlayerData, UnitData, BuildingData,
   FactionId, GameCommand, UnitType, BuildingType
-} from '../../../shared/types.js'
+} from '../../../shared/types'
 import {
   UNIT_STATS, BUILDING_COSTS, BUILDING_PRODUCES, BUILDING_INCOME,
   FACTION_MODIFIERS, SERVER_TICK_MS, FOG_UPDATE_MS, ECONOMY_TICK_SEC,
   CAPTURE_TIME_SEC, MAP_WIDTH, MAP_HEIGHT
-} from '../../../shared/constants.js'
-import { generateMap } from './MapGenerator.js'
-import { updateMovement } from '../systems/MovementSystem.js'
-import { resolveCombat, checkAutoAttack } from '../systems/BattleResolver.js'
-import { computeFogOfWar } from '../systems/FogOfWarServer.js'
-import { tickEconomy } from '../systems/EconomyServer.js'
-import { validateCommand } from '../systems/CommandValidator.js'
-import { findPath } from '../systems/PathfindingServer.js'
+} from '../../../shared/constants'
+import { generateMap } from './MapGenerator'
+import { updateMovement } from '../systems/MovementSystem'
+import { resolveCombat, checkAutoAttack } from '../systems/BattleResolver'
+import { computeFogOfWar } from '../systems/FogOfWarServer'
+import { tickEconomy } from '../systems/EconomyServer'
+import { validateCommand } from '../systems/CommandValidator'
+import { findPath } from '../systems/PathfindingServer'
 
 const FACTION_COLORS: Record<FactionId, string> = {
   korea: '#1a6fca',

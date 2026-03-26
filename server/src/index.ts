@@ -1,8 +1,8 @@
 import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import { GameRoom } from './game/GameRoom.js'
-import type { FactionId, GameCommand } from '../../shared/types.js'
+import { GameRoom } from './game/GameRoom'
+import type { FactionId, GameCommand } from '../../shared/types'
 
 const app = express()
 const httpServer = createServer(app)

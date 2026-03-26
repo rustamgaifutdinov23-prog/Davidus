@@ -1,5 +1,5 @@
-import type { GameState } from '../../../shared/types.js'
-import { UNIT_STATS } from '../../../shared/constants.js'
+import type { GameState } from '../../../shared/types'
+import { UNIT_STATS } from '../../../shared/constants'
 
 export interface FogResult {
   playerId: string

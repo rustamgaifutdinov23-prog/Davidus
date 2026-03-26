@@ -1,5 +1,5 @@
-import type { GameState, UnitData } from '../../../shared/types.js'
-import { UNIT_STATS, TERRAIN_SPEED } from '../../../shared/constants.js'
+import type { GameState, UnitData } from '../../../shared/types'
+import { UNIT_STATS, TERRAIN_SPEED } from '../../../shared/constants'
 
 export function updateMovement(state: GameState, dtSec: number) {
   for (const unit of Object.values(state.units)) {

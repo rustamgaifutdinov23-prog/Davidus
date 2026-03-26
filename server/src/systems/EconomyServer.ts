@@ -1,5 +1,5 @@
-import type { GameState } from '../../../shared/types.js'
-import { BUILDING_INCOME, RESOURCE_POINT_INCOME, ECONOMY_TICK_SEC } from '../../../shared/constants.js'
+import type { GameState } from '../../../shared/types'
+import { BUILDING_INCOME, RESOURCE_POINT_INCOME, ECONOMY_TICK_SEC } from '../../../shared/constants'
 
 export function tickEconomy(state: GameState) {
   // Reset income

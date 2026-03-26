@@ -1,5 +1,5 @@
-import type { GameState, GameCommand, BuildingType, UnitType } from '../../../shared/types.js'
-import { BUILDING_COSTS, BUILDING_PRODUCES, UNIT_STATS, FACTION_MODIFIERS } from '../../../shared/constants.js'
+import type { GameState, GameCommand, BuildingType, UnitType } from '../../../shared/types'
+import { BUILDING_COSTS, BUILDING_PRODUCES, UNIT_STATS, FACTION_MODIFIERS } from '../../../shared/constants'
 
 export type ValidationResult = { ok: true } | { ok: false; error: string }
 

@@ -1,6 +1,6 @@
 import { createNoise2D } from 'simplex-noise'
-import type { MapData, TileData, TileType, ResourcePoint } from '../../../shared/types.js'
-import { MAP_WIDTH, MAP_HEIGHT } from '../../../shared/constants.js'
+import type { MapData, TileData, TileType, ResourcePoint } from '../../../shared/types'
+import { MAP_WIDTH, MAP_HEIGHT } from '../../../shared/constants'
 import { v4 as uuidv4 } from 'uuid'
 
 function clamp(v: number, min: number, max: number) {
