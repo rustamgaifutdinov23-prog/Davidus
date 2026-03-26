@@ -71,8 +71,9 @@ export class LobbyUI {
       list.innerHTML += `<br>${name} (${faction})`
     }
 
-    this.net.onGameStarted = () => {
-      if (!this.inRoom) return
+    this.net.onGameStarted = ({ gameState }) => {
+      console.log('[Lobby] gameStarted received, myId:', this.net.playerId, 'inPlayers:', !!gameState?.players?.[this.net.playerId])
+      if (!gameState?.players?.[this.net.playerId]) return
       document.getElementById('lobby')!.style.display = 'none'
       this.onGameReady()
     }
