@@ -11,7 +11,6 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(window.innerWidth, window.innerHeight)
-    canvas.style.display = 'none' // Three.js sets display:block — override until game starts
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
 

@@ -12,13 +12,14 @@ import { raycastTile } from '../utils/isoMath.js'
 import { HUD } from '../ui/HUD.js'
 
 export class Game {
-  private renderer: Renderer
+  private renderer!: Renderer
   private rtsCamera: RTSCamera
   private terrain: TerrainMap
   private fog: FogOfWar
   public network: NetworkManager
   private selection: SelectionSystem
   private hud: HUD
+  private canvas: HTMLCanvasElement
 
   private unitMeshes = new Map<string, UnitMesh>()
   private buildingMeshes = new Map<string, BuildingMesh>()
@@ -29,7 +30,8 @@ export class Game {
   public playerId = ''
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new Renderer(canvas)
+    this.canvas = canvas
+    // Renderer is NOT created here — Three.js would show canvas over lobby
     this.rtsCamera = new RTSCamera()
     this.terrain = new TerrainMap()
     this.fog = new FogOfWar()
@@ -39,11 +41,6 @@ export class Game {
 
     this.setupNetworkHandlers()
     this.setupSelectionHandlers(canvas)
-
-    window.addEventListener('resize', () => {
-      this.renderer.renderer.setSize(window.innerWidth, window.innerHeight)
-      this.rtsCamera.onResize()
-    })
   }
 
   private setupNetworkHandlers() {
@@ -176,8 +173,12 @@ export class Game {
   }
 
   start() {
-    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
-    canvas.style.display = 'block'
+    // Initialize Three.js only now — keeps canvas hidden during lobby
+    this.renderer = new Renderer(this.canvas)
+    window.addEventListener('resize', () => {
+      this.renderer.renderer.setSize(window.innerWidth, window.innerHeight)
+      this.rtsCamera.onResize()
+    })
     this.lastTime = performance.now()
     this.loop(this.lastTime)
   }
