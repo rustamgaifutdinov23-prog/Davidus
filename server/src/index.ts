@@ -15,7 +15,7 @@ const io = new Server(httpServer, {
 })
 
 // Serve static client files in production
-const clientDist = path.join(__dirname, '../../client/dist')
+const clientDist = path.join(process.cwd(), 'client/dist')
 app.use(express.static(clientDist))
 app.get('*', (_req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'))
