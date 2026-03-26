@@ -1,6 +1,6 @@
 export const TILE_WORLD_SIZE = 2        // Three.js units per tile
 export const TILE_HEIGHT_SCALE = 0.3    // Height of elevated terrain
-export const SERVER_URL = 'http://localhost:3001'
+export const SERVER_URL = ''
 
 export const FACTION_COLORS: Record<string, number> = {
   korea: 0x1a6fca,

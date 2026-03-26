@@ -3,14 +3,22 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { GameRoom } from './game/GameRoom'
 import type { FactionId, GameCommand } from '../../shared/types'
+import path from 'path'
 
 const app = express()
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: '*',
     methods: ['GET', 'POST'],
   },
+})
+
+// Serve static client files in production
+const clientDist = path.join(__dirname, '../../client/dist')
+app.use(express.static(clientDist))
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'index.html'))
 })
 
 const rooms = new Map<string, GameRoom>()
@@ -85,7 +93,7 @@ io.on('connection', (socket) => {
   })
 })
 
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 httpServer.listen(PORT, () => {
-  console.log(`[Davidus] Server running on http://localhost:${PORT}`)
+  console.log(`[Davidus] Server running on port ${PORT}`)
 })
