@@ -3,6 +3,7 @@ import { NetworkManager } from '../systems/NetworkManager.js'
 
 export class LobbyUI {
   private net: NetworkManager
+  private inRoom = false
   onGameReady: () => void = () => {}
 
   constructor(net: NetworkManager) {
@@ -69,6 +70,7 @@ export class LobbyUI {
     }
 
     this.net.onGameStarted = () => {
+      if (!this.inRoom) return
       document.getElementById('lobby')!.style.display = 'none'
       this.onGameReady()
     }
@@ -85,6 +87,7 @@ export class LobbyUI {
   private async createRoom() {
     const res = await this.net.createRoom(this.getName(), this.getFaction())
     if (!res.ok) return this.showError(res.error ?? 'Error')
+    this.inRoom = true
     this.showRoomInfo(res.roomId!, true)
   }
 
@@ -92,6 +95,7 @@ export class LobbyUI {
     const code = (document.getElementById('room-code') as HTMLInputElement).value.toUpperCase()
     const res = await this.net.joinRoom(code, this.getName(), this.getFaction())
     if (!res.ok) return this.showError(res.error ?? 'Error')
+    this.inRoom = true
     this.showRoomInfo(code, false)
   }
 
