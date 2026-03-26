@@ -29,13 +29,13 @@ export class Game {
   private gameState: GameState | null = null
   public playerId = ''
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, network: NetworkManager) {
     this.canvas = canvas
+    this.network = network
     // Renderer is NOT created here — Three.js would show canvas over lobby
     this.rtsCamera = new RTSCamera()
     this.terrain = new TerrainMap()
     this.fog = new FogOfWar()
-    this.network = new NetworkManager()
     this.selection = new SelectionSystem(this.rtsCamera.camera, canvas)
     this.hud = new HUD()
 
