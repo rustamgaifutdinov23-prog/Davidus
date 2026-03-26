@@ -176,6 +176,8 @@ export class Game {
   }
 
   start() {
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
+    canvas.style.display = 'block'
     this.lastTime = performance.now()
     this.loop(this.lastTime)
   }
