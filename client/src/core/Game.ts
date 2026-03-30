@@ -10,6 +10,46 @@ import { UnitMesh } from '../entities/Unit.js'
 import { BuildingMesh } from '../entities/Building.js'
 import type { GameState, StateTick, FogUpdate, UnitData, BuildingData, BuildingType } from '@shared/types.js'
 import { HUD } from '../ui/HUD.js'
+import { TILE_WORLD_SIZE } from '../utils/constants.js'
+
+// ---- Hit / projectile effect ----
+class HitEffect {
+  private mesh: THREE.Mesh
+  private life = 0
+  private readonly duration = 0.45
+  private dead = false
+
+  constructor(x: number, z: number, scene: THREE.Scene, color: number) {
+    const geo = new THREE.RingGeometry(0.1, 0.45, 18)
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthTest: false,
+    })
+    this.mesh = new THREE.Mesh(geo, mat)
+    this.mesh.rotation.x = -Math.PI / 2
+    this.mesh.position.set(x, 0.25, z)
+    this.mesh.renderOrder = 10
+    scene.add(this.mesh)
+  }
+
+  update(dt: number): boolean {
+    if (this.dead) return false
+    this.life += dt
+    const t = this.life / this.duration
+    const mat = this.mesh.material as THREE.MeshBasicMaterial
+    this.mesh.scale.setScalar(1 + t * 2.5)
+    mat.opacity = 0.95 * (1 - t)
+    if (t >= 1) {
+      this.mesh.parent?.remove(this.mesh)
+      this.dead = true
+      return false
+    }
+    return true
+  }
+}
 
 export class Game {
   private renderer!: Renderer
@@ -24,6 +64,10 @@ export class Game {
 
   private unitMeshes = new Map<string, UnitMesh>()
   private buildingMeshes = new Map<string, BuildingMesh>()
+  private hitEffects: HitEffect[] = []
+
+  // Track previous HP to detect hits
+  private prevUnitHp = new Map<string, number>()
 
   private lastTime = 0
   private animId = 0
@@ -80,9 +124,11 @@ export class Game {
     this.network.onUnitDied = ({ unitId }) => {
       const um = this.unitMeshes.get(unitId)
       if (um) {
+        this.spawnHitEffect(um.mesh.position.x, um.mesh.position.z, 0xff4400)
         um.destroy()
         this.unitMeshes.delete(unitId)
       }
+      this.prevUnitHp.delete(unitId)
       if (this.gameState?.units[unitId]) {
         delete this.gameState.units[unitId]
       }
@@ -98,6 +144,7 @@ export class Game {
     this.network.onBuildingDestroyed = ({ buildingId }) => {
       const bm = this.buildingMeshes.get(buildingId)
       if (bm) {
+        this.spawnHitEffect(bm.mesh.position.x, bm.mesh.position.z, 0xff6600)
         bm.destroy()
         this.buildingMeshes.delete(buildingId)
       }
@@ -114,28 +161,30 @@ export class Game {
     }
   }
 
+  private spawnHitEffect(x: number, z: number, color: number) {
+    if (!this.renderer) return
+    // Spawn two rings: red inner + orange outer
+    this.hitEffects.push(new HitEffect(x, z, this.renderer.scene, color))
+    this.hitEffects.push(new HitEffect(x, z, this.renderer.scene, 0xff9900))
+  }
+
   private setupSelectionHandlers(canvas: HTMLCanvasElement) {
     this.selection.onSelectUnits = (ids) => {
       this.hud.showSelectedUnits(ids, this.gameState)
       if (ids.length > 0) {
-        // User selected units — clear building production panel
         this.hud.showSelectedBuilding('', 'barracks', [])
       }
     }
 
     this.selection.onRightClick = (tileX: number, tileY: number) => {
-      // If placer is active, ignore right clicks
       if (this.placer?.isActive) return
-
       const selected = this.selection.selectedUnitIds
       if (selected.length === 0) return
-
       for (const unitId of selected) {
         this.network.sendCommand({ type: 'move', unitId, targetX: tileX, targetY: tileY })
       }
     }
 
-    // Click on building to show production
     canvas.addEventListener('click', (e) => {
       if (this.placer?.isActive) return
       this.trySelectBuilding(e)
@@ -171,6 +220,7 @@ export class Game {
 
     for (const unit of Object.values(state.units)) {
       this.addUnitMesh(unit)
+      this.prevUnitHp.set(unit.id, unit.hp)
     }
     for (const building of Object.values(state.buildings)) {
       this.addBuildingMesh(building)
@@ -180,7 +230,6 @@ export class Game {
     this.hud.init(this.playerId, state)
     this.placer.setMap(state.map)
 
-    // Bind build buttons in HUD
     this.hud.onBuildBuilding = (type: BuildingType) => {
       this.placer.activate(type)
     }
@@ -215,6 +264,15 @@ export class Game {
         const unitData = this.gameState?.units[u.id]
         const maxHp = unitData?.maxHp ?? 100
         um.updateHp(u.hp, maxHp)
+
+        // Detect HP loss → spawn hit ring at unit position
+        const prevHp = this.prevUnitHp.get(u.id) ?? u.hp
+        if (u.hp < prevHp) {
+          const wx = u.x * TILE_WORLD_SIZE
+          const wz = u.y * TILE_WORLD_SIZE
+          this.spawnHitEffect(wx, wz, 0xff2200)
+        }
+        this.prevUnitHp.set(u.id, u.hp)
       }
     }
 
@@ -255,6 +313,9 @@ export class Game {
     for (const um of this.unitMeshes.values()) {
       um.update(dt)
     }
+
+    // Update hit effects, remove dead ones
+    this.hitEffects = this.hitEffects.filter(e => e.update(dt))
 
     this.renderer.render(this.rtsCamera.camera)
     this.animId = requestAnimationFrame(this.loop)
