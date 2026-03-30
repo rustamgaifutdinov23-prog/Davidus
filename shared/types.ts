@@ -10,7 +10,7 @@ export type BuildingType = 'headquarters' | 'barracks' | 'factory' | 'artillery_
 
 export type TileType = 'grass' | 'forest' | 'mountain' | 'road' | 'river' | 'bridge' | 'swamp'
 
-export type UnitState = 'idle' | 'moving' | 'attacking' | 'dead' | 'capturing'
+export type UnitState = 'idle' | 'moving' | 'attacking' | 'dead' | 'capturing' | 'charging'
 
 export type BuildingState = 'idle' | 'producing' | 'destroyed'
 
@@ -49,10 +49,10 @@ export interface UnitStats {
   maxHp: number
   attack: number
   defense: number
-  speed: number        // tiles per second
-  range: number        // attack range in tiles
-  visionRange: number  // fog of war vision in tiles
-  buildTime: number    // seconds to produce
+  speed: number
+  range: number
+  visionRange: number
+  buildTime: number
   cost: number
 }
 
@@ -61,8 +61,8 @@ export interface UnitData {
   type: UnitType
   ownerId: string
   faction: FactionId
-  x: number            // world X position (tile-based, floats during movement)
-  y: number            // world Y position
+  x: number
+  y: number
   hp: number
   maxHp: number
   state: UnitState
@@ -70,6 +70,7 @@ export interface UnitData {
   targetY: number | null
   attackTargetId: string | null
   path: { x: number; y: number }[]
+  chargeTimer?: number   // seconds charging for anti-tank shot
 }
 
 // ----------------------------------------------------------------
@@ -86,7 +87,7 @@ export interface BuildingData {
   maxHp: number
   state: BuildingState
   productionQueue: UnitType[]
-  productionTimer: number  // seconds remaining
+  productionTimer: number
   incomePerTick: number
 }
 
@@ -99,6 +100,7 @@ export interface PlayerData {
   faction: FactionId
   money: number
   income: number
+  score: number
   isConnected: boolean
   color: string
 }
@@ -116,6 +118,8 @@ export interface GameState {
   started: boolean
   gameOver: boolean
   winnerId: string | null
+  gameDurationSec: number | null   // null = infinite
+  timeRemaining: number            // seconds, counts down
 }
 
 // ----------------------------------------------------------------
@@ -129,7 +133,7 @@ export interface StateTick {
 
 export interface FogUpdate {
   playerId: string
-  visibleTiles: [number, number][]  // [tileX, tileY]
+  visibleTiles: [number, number][]
   visibleUnitIds: string[]
 }
 
@@ -137,6 +141,14 @@ export interface EconomyUpdate {
   playerId: string
   money: number
   income: number
+}
+
+export interface ScoreUpdate {
+  scores: Record<string, number>   // playerId → score
+}
+
+export interface TimerUpdate {
+  timeRemaining: number
 }
 
 // ----------------------------------------------------------------

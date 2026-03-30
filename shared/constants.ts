@@ -3,12 +3,17 @@ import type { UnitStats, FactionId, UnitType, BuildingType, TileType } from './t
 // ----------------------------------------------------------------
 // Map config
 
-export const MAP_WIDTH = 40
-export const MAP_HEIGHT = 40
+export const MAP_WIDTH = 200
+export const MAP_HEIGHT = 200
 export const TILE_SIZE = 2         // world units per tile (Three.js)
 export const SERVER_TICK_MS = 50   // 20 FPS game loop
-export const FOG_UPDATE_MS = 200   // fog recalc interval
+export const FOG_UPDATE_MS = 300   // fog recalc interval
 export const ECONOMY_TICK_SEC = 5  // income tick in seconds
+
+// ----------------------------------------------------------------
+// Game duration options (minutes, null = infinite)
+
+export const GAME_DURATION_OPTIONS: (number | null)[] = [10, 15, 20, 30, null]
 
 // ----------------------------------------------------------------
 // Unit stats (base, before faction modifiers)
@@ -18,16 +23,16 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
     maxHp: 60,
     attack: 10,
     defense: 5,
-    speed: 3,       // tiles/sec
+    speed: 3,
     range: 2,
     visionRange: 5,
     buildTime: 8,
     cost: 50,
   },
   tank: {
-    maxHp: 150,
-    attack: 30,
-    defense: 20,
+    maxHp: 200,
+    attack: 35,
+    defense: 25,
     speed: 2,
     range: 3,
     visionRange: 4,
@@ -57,14 +62,22 @@ export const UNIT_STATS: Record<UnitType, UnitStats> = {
 }
 
 // ----------------------------------------------------------------
-// Building costs and income
+// Building costs, HP and income
 
 export const BUILDING_COSTS: Record<BuildingType, number> = {
-  headquarters: 0,         // spawned, not built
+  headquarters: 0,
   barracks: 100,
   factory: 200,
   artillery_base: 250,
   admin_building: 80,
+}
+
+export const BUILDING_HP: Record<BuildingType, number> = {
+  headquarters: 800,
+  barracks: 300,
+  factory: 400,
+  artillery_base: 350,
+  admin_building: 250,
 }
 
 export const BUILDING_INCOME: Record<BuildingType, number> = {
@@ -72,11 +85,11 @@ export const BUILDING_INCOME: Record<BuildingType, number> = {
   barracks: 0,
   factory: 0,
   artillery_base: 0,
-  admin_building: 3,
+  admin_building: 15,
 }
 
-export const RESOURCE_POINT_INCOME = 5   // per economy tick
-export const CAPTURE_TIME_SEC = 3        // seconds to capture a resource point
+export const RESOURCE_POINT_INCOME = 5
+export const CAPTURE_TIME_SEC = 3
 
 // Which buildings produce which units
 export const BUILDING_PRODUCES: Partial<Record<BuildingType, UnitType[]>> = {
@@ -86,21 +99,28 @@ export const BUILDING_PRODUCES: Partial<Record<BuildingType, UnitType[]>> = {
 }
 
 // ----------------------------------------------------------------
+// Anti-tank charge mechanic
+// Infantry targeting a tank stands still 5s then fires a big burst
+
+export const ANTITANK_CHARGE_SEC = 5
+export const ANTITANK_BONUS_DAMAGE = 120
+
+// ----------------------------------------------------------------
 // Terrain config
 
 export const TERRAIN_SPEED: Record<TileType, number> = {
   grass: 1.0,
   forest: 0.5,
-  mountain: 0,     // impassable
+  mountain: 0,
   road: 1.5,
-  river: 0,        // impassable
+  river: 0,
   bridge: 0.8,
   swamp: 0.4,
 }
 
 export const TERRAIN_DEFENSE_BONUS: Record<TileType, number> = {
   grass: 0,
-  forest: 0.3,     // +30% defense
+  forest: 0.3,
   mountain: 0.5,
   road: 0,
   river: 0,
@@ -108,7 +128,6 @@ export const TERRAIN_DEFENSE_BONUS: Record<TileType, number> = {
   swamp: 0.1,
 }
 
-// Infantry can traverse forest, tanks cannot
 export const INFANTRY_ONLY_TERRAIN: TileType[] = ['forest', 'swamp']
 
 // ----------------------------------------------------------------
@@ -155,8 +174,6 @@ export const FACTION_MODIFIERS: Record<FactionId, FactionModifiers> = {
 
 // ----------------------------------------------------------------
 // Combat formula
-// damage = attacker.attack - defender.defense + rand(-2, 2)
-// Terrain defense bonus applied: effectiveDefense = defense * (1 + terrainBonus)
 
-export const COMBAT_RANDOM_RANGE = 2   // ±2
-export const ATTACK_COOLDOWN_MS = 1500 // ms between auto-attacks
+export const COMBAT_RANDOM_RANGE = 2
+export const ATTACK_COOLDOWN_MS = 1500

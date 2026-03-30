@@ -62,16 +62,25 @@ io.on('connection', (socket) => {
     callback({ ok: true, roomId: currentRoomId, gameState: room.getPublicState() })
   })
 
-  socket.on('startGame', (callback: (r: { ok: boolean; error?: string }) => void) => {
-    console.log(`[Davidus] startGame from socket ${socket.id}, room=${currentRoomId}`)
-    if (!currentRoomId) return callback({ ok: false, error: 'Not in a room' })
+  socket.on('startGame', (data: { gameDuration?: number | null } | ((r: any) => void), callback?: (r: { ok: boolean; error?: string }) => void) => {
+    // Support both old (callback only) and new (data + callback) signatures
+    let cb: (r: { ok: boolean; error?: string }) => void
+    let gameDuration: number | null = null
+    if (typeof data === 'function') {
+      cb = data
+    } else {
+      cb = callback!
+      gameDuration = data.gameDuration ?? null
+    }
+    console.log(`[Davidus] startGame from socket ${socket.id}, room=${currentRoomId}, duration=${gameDuration}`)
+    if (!currentRoomId) return cb({ ok: false, error: 'Not in a room' })
     const room = rooms.get(currentRoomId)
-    if (!room) return callback({ ok: false, error: 'Room gone' })
-    if (room.playerCount < 2) return callback({ ok: false, error: 'Need at least 2 players' })
+    if (!room) return cb({ ok: false, error: 'Room gone' })
+    if (room.playerCount < 2) return cb({ ok: false, error: 'Need at least 2 players' })
     const playerIds = Object.keys(room.getPublicState().players)
     console.log(`[Davidus] gameStarted emitting to room ${currentRoomId}, players: [${playerIds.join(', ')}]`)
-    room.startGame()
-    callback({ ok: true })
+    room.startGame(gameDuration)
+    cb({ ok: true })
   })
 
   // ---------- In-game commands ----------

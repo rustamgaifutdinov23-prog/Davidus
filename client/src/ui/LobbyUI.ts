@@ -1,10 +1,10 @@
-import type { FactionId } from '@shared/types.js'
+import type { FactionId, GameState } from '@shared/types.js'
 import { NetworkManager } from '../systems/NetworkManager.js'
 
 export class LobbyUI {
   private net: NetworkManager
   private inRoom = false
-  onGameReady: () => void = () => {}
+  onGameReady: (gameState: GameState) => void = () => {}
 
   constructor(net: NetworkManager) {
     this.net = net
@@ -32,6 +32,17 @@ export class LobbyUI {
             <option value="japan">🇯🇵 Japan — Tanks +15% speed</option>
             <option value="china">🇨🇳 China — +100 starting gold</option>
             <option value="vietnam">🇻🇳 Vietnam — Infantry invisible in forest</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Game Duration</label>
+          <select id="duration-select">
+            <option value="10">10 minutes</option>
+            <option value="15" selected>15 minutes</option>
+            <option value="20">20 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="0">♾️ Infinite</option>
           </select>
         </div>
 
@@ -76,7 +87,7 @@ export class LobbyUI {
       if (!this.inRoom) return
       if (!gameState?.players?.[this.net.playerId]) return
       document.getElementById('lobby')!.style.display = 'none'
-      this.onGameReady()
+      this.onGameReady(gameState)
     }
   }
 
@@ -86,6 +97,11 @@ export class LobbyUI {
 
   private getFaction(): FactionId {
     return (document.getElementById('faction-select') as HTMLSelectElement).value as FactionId
+  }
+
+  private getDuration(): number | null {
+    const val = parseInt((document.getElementById('duration-select') as HTMLSelectElement).value)
+    return val === 0 ? null : val
   }
 
   private async createRoom() {
@@ -104,7 +120,8 @@ export class LobbyUI {
   }
 
   private async startGame() {
-    const res = await this.net.startGame()
+    const duration = this.getDuration()
+    const res = await this.net.startGame(duration)
     if (!res.ok) this.showError(res.error ?? 'Error')
   }
 

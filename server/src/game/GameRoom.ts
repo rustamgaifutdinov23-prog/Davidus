@@ -5,9 +5,9 @@ import type {
   FactionId, GameCommand, UnitType, BuildingType
 } from '../../../shared/types'
 import {
-  UNIT_STATS, BUILDING_COSTS, BUILDING_PRODUCES, BUILDING_INCOME,
+  UNIT_STATS, BUILDING_COSTS, BUILDING_HP, BUILDING_PRODUCES, BUILDING_INCOME,
   FACTION_MODIFIERS, SERVER_TICK_MS, FOG_UPDATE_MS, ECONOMY_TICK_SEC,
-  CAPTURE_TIME_SEC, MAP_WIDTH, MAP_HEIGHT
+  CAPTURE_TIME_SEC, MAP_WIDTH, MAP_HEIGHT, ANTITANK_CHARGE_SEC, ANTITANK_BONUS_DAMAGE,
 } from '../../../shared/constants'
 import { generateMap } from './MapGenerator'
 import { updateMovement } from '../systems/MovementSystem'
@@ -15,7 +15,7 @@ import { resolveCombat, checkAutoAttack } from '../systems/BattleResolver'
 import { computeFogOfWar } from '../systems/FogOfWarServer'
 import { tickEconomy } from '../systems/EconomyServer'
 import { validateCommand } from '../systems/CommandValidator'
-import { findPath } from '../systems/PathfindingServer'
+import { findPath, buildGridCache } from '../systems/PathfindingServer'
 
 const FACTION_COLORS: Record<FactionId, string> = {
   korea: '#1a6fca',
@@ -24,6 +24,8 @@ const FACTION_COLORS: Record<FactionId, string> = {
   vietnam: '#3da64f',
 }
 
+const TIMER_BROADCAST_SEC = 1   // broadcast timer every second
+
 export class GameRoom {
   readonly id: string
   private io: Server
@@ -31,8 +33,8 @@ export class GameRoom {
   private tickInterval: NodeJS.Timeout | null = null
   private fogInterval: NodeJS.Timeout | null = null
   private economyTimer = 0
+  private timerAccum = 0
   private lastTick = Date.now()
-  private lastFog = Date.now()
   maxPlayers = 4
 
   constructor(id: string, io: Server) {
@@ -48,6 +50,8 @@ export class GameRoom {
       started: false,
       gameOver: false,
       winnerId: null,
+      gameDurationSec: null,
+      timeRemaining: 0,
     }
   }
 
@@ -64,6 +68,7 @@ export class GameRoom {
       faction,
       money: 200 + mods.startingBonusMoney,
       income: 0,
+      score: 0,
       isConnected: true,
       color: FACTION_COLORS[faction],
     }
@@ -82,11 +87,12 @@ export class GameRoom {
     }
   }
 
-  startGame() {
+  startGame(gameDurationMinutes: number | null = null) {
     this.state.started = true
+    this.state.gameDurationSec = gameDurationMinutes !== null ? gameDurationMinutes * 60 : null
+    this.state.timeRemaining = this.state.gameDurationSec ?? 0
     this.state.map = generateMap(this.playerCount)
 
-    // Spawn HQ + starting units for each player
     const playerIds = Object.keys(this.state.players)
     const spawns = this.state.map.playerSpawns
 
@@ -94,19 +100,17 @@ export class GameRoom {
       const spawn = spawns[i] ?? spawns[0]
       const player = this.state.players[pid]
 
-      // HQ building
       this.spawnBuilding(pid, player.faction, 'headquarters', spawn.x, spawn.y)
-
-      // Barracks next to HQ
       this.spawnBuilding(pid, player.faction, 'barracks', spawn.x + 2, spawn.y)
 
-      // Starting units: 3 infantry
       for (let u = 0; u < 3; u++) {
-        this.spawnUnit(pid, player.faction, 'infantry', spawn.x + u, spawn.y + 1)
+        this.spawnUnit(pid, player.faction, 'infantry', spawn.x + u, spawn.y + 2)
       }
-      // 1 tank
-      this.spawnUnit(pid, player.faction, 'tank', spawn.x, spawn.y + 2)
+      this.spawnUnit(pid, player.faction, 'tank', spawn.x + 1, spawn.y + 3)
     })
+
+    // Pre-build pathfinding grid cache for 200x200 map
+    buildGridCache(this.state.map)
 
     this.io.to(this.id).emit('gameStarted', { gameState: this.getPublicState() })
     this.startLoop()
@@ -130,19 +134,38 @@ export class GameRoom {
   private tick(dtSec: number, now: number) {
     if (this.state.gameOver) return
 
+    // Countdown timer
+    if (this.state.gameDurationSec !== null) {
+      this.state.timeRemaining = Math.max(0, this.state.timeRemaining - dtSec)
+      this.timerAccum += dtSec
+      if (this.timerAccum >= TIMER_BROADCAST_SEC) {
+        this.timerAccum = 0
+        this.io.to(this.id).emit('timerUpdate', { timeRemaining: this.state.timeRemaining })
+      }
+      if (this.state.timeRemaining <= 0) {
+        this.endByTimer()
+        return
+      }
+    }
+
+    // Anti-tank charging logic
+    this.tickAntiTankCharge(dtSec, now)
+
     // Movement
     updateMovement(this.state, dtSec)
 
-    // Auto-attack check
+    // Auto-attack
     checkAutoAttack(this.state)
 
     // Combat
     const deadIds = resolveCombat(this.state, now)
     for (const id of deadIds) {
+      const unit = this.state.units[id]
+      if (unit) this.awardKillScore(unit.ownerId, UNIT_STATS[unit.type].cost)
       this.io.to(this.id).emit('unitDied', { unitId: id })
     }
 
-    // Resource point capture
+    // Resource capture
     this.tickCapture(dtSec)
 
     // Economy
@@ -159,7 +182,7 @@ export class GameRoom {
       }
     }
 
-    // Broadcast state tick
+    // Broadcast tick
     this.state.tick++
     const tickPayload = {
       units: Object.values(this.state.units)
@@ -179,6 +202,71 @@ export class GameRoom {
     this.io.to(this.id).emit('stateTick', tickPayload)
 
     this.checkWinCondition()
+  }
+
+  // Infantry charging a tank: stand still 5 sec, then burst
+  private tickAntiTankCharge(dtSec: number, now: number) {
+    for (const unit of Object.values(this.state.units)) {
+      if (unit.state === 'dead') continue
+      if (unit.type !== 'infantry') continue
+      if (unit.state !== 'charging') continue
+      if (!unit.attackTargetId) continue
+
+      const target = this.state.units[unit.attackTargetId]
+      if (!target || target.state === 'dead' || target.type !== 'tank') {
+        unit.state = 'idle'
+        unit.chargeTimer = 0
+        continue
+      }
+
+      unit.chargeTimer = (unit.chargeTimer ?? 0) + dtSec
+      if (unit.chargeTimer >= ANTITANK_CHARGE_SEC) {
+        // Fire
+        const dist = Math.hypot(unit.x - target.x, unit.y - target.y)
+        if (dist <= UNIT_STATS.infantry.range + 1) {
+          target.hp = Math.max(0, target.hp - ANTITANK_BONUS_DAMAGE)
+          if (target.hp <= 0) {
+            target.state = 'dead'
+            this.awardKillScore(unit.ownerId, UNIT_STATS.tank.cost)
+            this.io.to(this.id).emit('unitDied', { unitId: target.id })
+          }
+        }
+        unit.state = 'idle'
+        unit.chargeTimer = 0
+        unit.attackTargetId = null
+      }
+    }
+  }
+
+  private awardKillScore(killerOwnerId: string, points: number) {
+    // Find killer player
+    const killer = Object.values(this.state.players).find(
+      p => p.id !== killerOwnerId
+        ? false
+        : true
+    )
+    if (!killer) return
+    killer.score += points
+    this.broadcastScores()
+  }
+
+  private broadcastScores() {
+    const scores: Record<string, number> = {}
+    for (const p of Object.values(this.state.players)) {
+      scores[p.id] = p.score
+    }
+    this.io.to(this.id).emit('scoreUpdate', { scores })
+  }
+
+  private endByTimer() {
+    this.state.gameOver = true
+    // Winner is player with highest score
+    const players = Object.values(this.state.players)
+    players.sort((a, b) => b.score - a.score)
+    const winner = players[0] ?? null
+    this.state.winnerId = winner?.id ?? null
+    this.io.to(this.id).emit('gameOver', { winner, reason: 'timeout' })
+    this.stopLoop()
   }
 
   private tickCapture(dtSec: number) {
@@ -216,20 +304,39 @@ export class GameRoom {
         const unit = this.state.units[cmd.unitId]
         const path = findPath(this.state.map, unit.x, unit.y, cmd.targetX, cmd.targetY, unit.type)
         if (path.length > 0) {
-          unit.path = path.slice(1) // skip current position
+          unit.path = path.slice(1)
           unit.state = 'moving'
           unit.targetX = cmd.targetX
           unit.targetY = cmd.targetY
           unit.attackTargetId = null
+          unit.chargeTimer = 0
         }
         break
       }
 
       case 'attack': {
         const unit = this.state.units[cmd.unitId]
-        unit.state = 'attacking'
-        unit.attackTargetId = cmd.targetUnitId
-        unit.path = []
+        const target = this.state.units[cmd.targetUnitId]
+        // Infantry targeting a tank → charging mode
+        if (unit.type === 'infantry' && target?.type === 'tank') {
+          const dist = Math.hypot(unit.x - target.x, unit.y - target.y)
+          if (dist <= UNIT_STATS.infantry.range + 1) {
+            unit.state = 'charging'
+            unit.attackTargetId = cmd.targetUnitId
+            unit.chargeTimer = 0
+            unit.path = []
+          } else {
+            // Move closer first
+            unit.state = 'moving'
+            unit.attackTargetId = cmd.targetUnitId
+            unit.targetX = target.x
+            unit.targetY = target.y
+          }
+        } else {
+          unit.state = 'attacking'
+          unit.attackTargetId = cmd.targetUnitId
+          unit.path = []
+        }
         break
       }
 
@@ -247,7 +354,6 @@ export class GameRoom {
         if (building.state === 'idle') {
           building.state = 'producing'
           building.productionTimer = UNIT_STATS[cmd.unitType].buildTime
-          // Schedule spawn
           this.scheduleUnitSpawn(building, cmd.unitType, playerId, player.faction)
         }
         this.io.to(playerId).emit('buildQueued', { buildingId: building.id, unitType: cmd.unitType })
@@ -269,7 +375,6 @@ export class GameRoom {
         if (!point) break
         const dist = Math.hypot(unit.x - point.x, unit.y - point.y)
         if (dist > 1.5) {
-          // Move toward point first
           const path = findPath(this.state.map, unit.x, unit.y, point.x, point.y, unit.type)
           unit.path = path.slice(1)
           unit.state = 'moving'
@@ -280,6 +385,13 @@ export class GameRoom {
         break
       }
     }
+  }
+
+  // Called externally when a building is destroyed
+  notifyBuildingDestroyed(building: BuildingData, killerOwnerId: string) {
+    this.awardKillScore(killerOwnerId, BUILDING_COSTS[building.type] || 50)
+    building.state = 'destroyed'
+    this.io.to(this.id).emit('buildingDestroyed', { buildingId: building.id })
   }
 
   private scheduleUnitSpawn(building: BuildingData, unitType: UnitType, ownerId: string, faction: FactionId) {
@@ -316,6 +428,7 @@ export class GameRoom {
       targetY: null,
       attackTargetId: null,
       path: [],
+      chargeTimer: 0,
     }
     this.state.units[id] = unit
     return unit
@@ -323,6 +436,7 @@ export class GameRoom {
 
   private spawnBuilding(ownerId: string, faction: FactionId, type: BuildingType, tileX: number, tileY: number): BuildingData {
     const id = uuidv4()
+    const hp = BUILDING_HP[type] ?? 300
     const bldg: BuildingData = {
       id,
       type,
@@ -330,8 +444,8 @@ export class GameRoom {
       faction,
       tileX,
       tileY,
-      hp: 200,
-      maxHp: 200,
+      hp,
+      maxHp: hp,
       state: 'idle',
       productionQueue: [],
       productionTimer: 0,
@@ -354,7 +468,7 @@ export class GameRoom {
     if (activePlayers.length <= 1) {
       this.state.gameOver = true
       this.state.winnerId = activePlayers[0]?.id ?? null
-      this.io.to(this.id).emit('gameOver', { winner: activePlayers[0] ?? null })
+      this.io.to(this.id).emit('gameOver', { winner: activePlayers[0] ?? null, reason: 'elimination' })
       this.stopLoop()
     }
   }

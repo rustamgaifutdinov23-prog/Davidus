@@ -7,9 +7,9 @@ console.log('[Davidus] main.ts v3 loaded')
 const network = new NetworkManager()
 const lobby = new LobbyUI(network)
 
-lobby.onGameReady = () => {
+lobby.onGameReady = (gameState) => {
   console.log('[Davidus] game starting...')
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
   const game = new Game(canvas, network)
-  game.start()
+  game.start(gameState)
 }

@@ -5,10 +5,10 @@ import { TerrainMap } from '../map/TerrainMap.js'
 import { FogOfWar } from '../map/FogOfWar.js'
 import { NetworkManager } from '../systems/NetworkManager.js'
 import { SelectionSystem } from '../systems/SelectionSystem.js'
+import { BuildingPlacer } from '../systems/BuildingPlacer.js'
 import { UnitMesh } from '../entities/Unit.js'
 import { BuildingMesh } from '../entities/Building.js'
-import type { GameState, StateTick, FogUpdate, UnitData, BuildingData } from '@shared/types.js'
-import { raycastTile } from '../utils/isoMath.js'
+import type { GameState, StateTick, FogUpdate, UnitData, BuildingData, BuildingType } from '@shared/types.js'
 import { HUD } from '../ui/HUD.js'
 
 export class Game {
@@ -19,6 +19,7 @@ export class Game {
   public network: NetworkManager
   private selection: SelectionSystem
   private hud: HUD
+  private placer!: BuildingPlacer
   private canvas: HTMLCanvasElement
 
   private unitMeshes = new Map<string, UnitMesh>()
@@ -32,23 +33,17 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, network: NetworkManager) {
     this.canvas = canvas
     this.network = network
-    // Renderer is NOT created here — Three.js would show canvas over lobby
     this.rtsCamera = new RTSCamera()
     this.terrain = new TerrainMap()
     this.fog = new FogOfWar()
     this.selection = new SelectionSystem(this.rtsCamera.camera, canvas)
-    this.hud = new HUD()
+    this.hud = new HUD(network)
 
     this.setupNetworkHandlers()
     this.setupSelectionHandlers(canvas)
   }
 
   private setupNetworkHandlers() {
-    this.network.onGameStarted = ({ gameState }) => {
-      this.playerId = this.network.playerId
-      this.initGameState(gameState)
-    }
-
     this.network.onStateTick = (tick: StateTick) => {
       this.applyStateTick(tick)
     }
@@ -56,7 +51,6 @@ export class Game {
     this.network.onFogUpdate = (fog: FogUpdate) => {
       if (fog.playerId === this.playerId) {
         this.fog.update(fog.visibleTiles)
-        // Hide enemy units not in visible set
         for (const [id, um] of this.unitMeshes) {
           if (um.ownerId !== this.playerId) {
             um.mesh.visible = fog.visibleUnitIds.includes(id)
@@ -71,6 +65,14 @@ export class Game {
       }
     }
 
+    this.network.onScoreUpdate = (data) => {
+      this.hud.updateScore(data.scores)
+    }
+
+    this.network.onTimerUpdate = (data) => {
+      this.hud.updateTimer(data.timeRemaining)
+    }
+
     this.network.onUnitSpawned = ({ unit }) => {
       this.addUnitMesh(unit)
     }
@@ -81,40 +83,85 @@ export class Game {
         um.destroy()
         this.unitMeshes.delete(unitId)
       }
+      if (this.gameState?.units[unitId]) {
+        delete this.gameState.units[unitId]
+      }
     }
 
     this.network.onBuildingBuilt = ({ building }) => {
       this.addBuildingMesh(building)
+      if (this.gameState) {
+        this.gameState.buildings[building.id] = building
+      }
     }
 
-    this.network.onGameOver = ({ winner }) => {
-      this.hud.showGameOver(winner?.name ?? 'Nobody')
+    this.network.onBuildingDestroyed = ({ buildingId }) => {
+      const bm = this.buildingMeshes.get(buildingId)
+      if (bm) {
+        bm.destroy()
+        this.buildingMeshes.delete(buildingId)
+      }
+    }
+
+    this.network.onGameOver = ({ winner, reason }) => {
+      const scores: Record<string, number> = {}
+      if (this.gameState) {
+        for (const p of Object.values(this.gameState.players)) {
+          scores[p.id] = p.score ?? 0
+        }
+      }
+      this.hud.showGameOver(winner?.name ?? 'Nobody', scores, reason ?? 'elimination')
     }
   }
 
   private setupSelectionHandlers(canvas: HTMLCanvasElement) {
     this.selection.onSelectUnits = (ids) => {
       this.hud.showSelectedUnits(ids, this.gameState)
+      // Clear building selection when selecting units
+      if (ids.length > 0) {
+        this.hud.showSelectedBuilding('', 'barracks', [])
+      }
     }
 
     this.selection.onRightClick = (tileX: number, tileY: number) => {
+      // If placer is active, ignore right clicks
+      if (this.placer?.isActive) return
+
       const selected = this.selection.selectedUnitIds
       if (selected.length === 0) return
 
       for (const unitId of selected) {
-        this.network.sendCommand({
-          type: 'move',
-          unitId,
-          targetX: tileX,
-          targetY: tileY,
-        })
+        this.network.sendCommand({ type: 'move', unitId, targetX: tileX, targetY: tileY })
       }
     }
 
-    // Attack: click on enemy unit with A key held
+    // Click on building to show production
     canvas.addEventListener('click', (e) => {
-      // handled in SelectionSystem
+      if (this.placer?.isActive) return
+      this.trySelectBuilding(e)
     })
+  }
+
+  private trySelectBuilding(e: MouseEvent) {
+    if (!this.gameState) return
+    const rect = this.canvas.getBoundingClientRect()
+    const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.rtsCamera.camera)
+
+    for (const [id, bm] of this.buildingMeshes) {
+      const hits = raycaster.intersectObject(bm.mesh, true)
+      if (hits.length > 0 && bm.ownerId === this.playerId) {
+        const bldg = this.gameState.buildings[id]
+        if (bldg) {
+          this.hud.showSelectedBuilding(id, bldg.type, bldg.productionQueue)
+          this.selection.clearSelection()
+        }
+        return
+      }
+    }
   }
 
   private initGameState(state: GameState) {
@@ -122,16 +169,29 @@ export class Game {
     this.terrain.build(this.renderer.scene, state.map)
     this.fog.build(this.renderer.scene, state.map)
 
-    // Spawn all units
     for (const unit of Object.values(state.units)) {
       this.addUnitMesh(unit)
     }
-    // Spawn all buildings
     for (const building of Object.values(state.buildings)) {
       this.addBuildingMesh(building)
     }
 
     this.selection.setUnitMeshes(this.unitMeshes)
+    this.hud.init(this.playerId, state)
+    this.placer.setMap(state.map)
+
+    // Bind build buttons in HUD
+    this.hud.onBuildBuilding = (type: BuildingType) => {
+      this.placer.activate(type)
+    }
+    this.placer.onCancelled = () => {
+      this.hud.clearActiveBuildBtn()
+      this.hud.showPlaceHint(false)
+    }
+    this.placer.onPlaced = () => {
+      this.hud.clearActiveBuildBtn()
+      this.hud.showPlaceHint(false)
+    }
   }
 
   private addUnitMesh(unit: UnitData) {
@@ -152,14 +212,12 @@ export class Game {
       const um = this.unitMeshes.get(u.id)
       if (um) {
         um.setPosition(u.x, u.y)
-        // Find maxHp
         const unitData = this.gameState?.units[u.id]
         const maxHp = unitData?.maxHp ?? 100
         um.updateHp(u.hp, maxHp)
       }
     }
 
-    // Update gameState units reference
     if (this.gameState) {
       for (const u of tick.units) {
         if (this.gameState.units[u.id]) {
@@ -172,13 +230,17 @@ export class Game {
     }
   }
 
-  start() {
-    // Initialize Three.js only now — keeps canvas hidden during lobby
+  start(gameState: GameState) {
     this.renderer = new Renderer(this.canvas)
+    this.placer = new BuildingPlacer(this.renderer.scene, this.rtsCamera, this.network, this.canvas)
+
     window.addEventListener('resize', () => {
       this.renderer.renderer.setSize(window.innerWidth, window.innerHeight)
       this.rtsCamera.onResize()
     })
+
+    this.playerId = this.network.playerId
+    this.initGameState(gameState)
     this.lastTime = performance.now()
     this.loop(this.lastTime)
   }

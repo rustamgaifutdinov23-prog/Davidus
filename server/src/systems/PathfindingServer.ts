@@ -1,6 +1,28 @@
 import PF from 'pathfinding'
-import type { MapData, TileData, UnitType } from '../../../shared/types'
+import type { MapData, UnitType } from '../../../shared/types'
 import { INFANTRY_ONLY_TERRAIN } from '../../../shared/constants'
+
+// Cache grids per unit category to avoid rebuilding 200x200 grid every call
+const gridCache = new Map<string, PF.Grid>()
+
+export function buildGridCache(map: MapData) {
+  gridCache.clear()
+
+  for (const category of ['infantry', 'vehicle'] as const) {
+    const grid = new PF.Grid(map.width, map.height)
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const tile = map.tiles[y][x]
+        let walkable = tile.passable
+        if (category === 'vehicle' && INFANTRY_ONLY_TERRAIN.includes(tile.type)) {
+          walkable = false
+        }
+        grid.setWalkableAt(x, y, walkable)
+      }
+    }
+    gridCache.set(category, grid)
+  }
+}
 
 export function findPath(
   map: MapData,
@@ -10,32 +32,26 @@ export function findPath(
   toY: number,
   unitType: UnitType
 ): { x: number; y: number }[] {
-  const grid = new PF.Grid(map.width, map.height)
+  const category = unitType === 'infantry' ? 'infantry' : 'vehicle'
 
-  for (let y = 0; y < map.height; y++) {
-    for (let x = 0; x < map.width; x++) {
-      const tile = map.tiles[y][x]
-      let walkable = tile.passable
-
-      // Non-infantry cannot enter forest/swamp that is infantry-only passable
-      if (unitType !== 'infantry' && INFANTRY_ONLY_TERRAIN.includes(tile.type)) {
-        walkable = false
-      }
-
-      grid.setWalkableAt(x, y, walkable)
-    }
+  if (!gridCache.has(category)) {
+    buildGridCache(map)
   }
+
+  // Clone the cached grid — PF.Grid.clone() for A* to avoid mutation
+  const baseGrid = gridCache.get(category)!
+  const grid = baseGrid.clone()
 
   const finder = new PF.AStarFinder({
     allowDiagonal: false,
     dontCrossCorners: true,
   } as PF.FinderOptions)
 
-  const rawPath = finder.findPath(
-    Math.round(fromX), Math.round(fromY),
-    Math.round(toX), Math.round(toY),
-    grid
-  )
+  const fx = Math.max(0, Math.min(map.width - 1, Math.round(fromX)))
+  const fy = Math.max(0, Math.min(map.height - 1, Math.round(fromY)))
+  const tx = Math.max(0, Math.min(map.width - 1, Math.round(toX)))
+  const ty = Math.max(0, Math.min(map.height - 1, Math.round(toY)))
 
+  const rawPath = finder.findPath(fx, fy, tx, ty, grid)
   return rawPath.map(([x, y]) => ({ x, y }))
 }
