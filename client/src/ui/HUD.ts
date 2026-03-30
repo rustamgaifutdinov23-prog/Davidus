@@ -159,9 +159,7 @@ export class HUD {
     const container = this.selectedEl
     if (ids.length === 0) {
       container.innerHTML = '<div class="sel-hdr">Selected</div>'
-      this.selectedBuildingId = null
-      this.selectedBuildingType = null
-      this.showProductionForBuilding(null, null)
+      // Don't reset building selection — building panel managed separately
       return
     }
 

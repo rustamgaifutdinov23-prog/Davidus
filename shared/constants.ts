@@ -3,8 +3,8 @@ import type { UnitStats, FactionId, UnitType, BuildingType, TileType } from './t
 // ----------------------------------------------------------------
 // Map config
 
-export const MAP_WIDTH = 200
-export const MAP_HEIGHT = 200
+export const MAP_WIDTH = 80
+export const MAP_HEIGHT = 80
 export const TILE_SIZE = 2         // world units per tile (Three.js)
 export const SERVER_TICK_MS = 50   // 20 FPS game loop
 export const FOG_UPDATE_MS = 300   // fog recalc interval

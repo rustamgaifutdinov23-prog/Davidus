@@ -117,8 +117,8 @@ export class Game {
   private setupSelectionHandlers(canvas: HTMLCanvasElement) {
     this.selection.onSelectUnits = (ids) => {
       this.hud.showSelectedUnits(ids, this.gameState)
-      // Clear building selection when selecting units
       if (ids.length > 0) {
+        // User selected units — clear building production panel
         this.hud.showSelectedBuilding('', 'barracks', [])
       }
     }

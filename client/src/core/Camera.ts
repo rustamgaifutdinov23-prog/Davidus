@@ -61,20 +61,20 @@ export class RTSCamera {
 
     // WASD / arrow keys pan
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) {
-      this.camera.position.x -= speed * 0.7
-      this.camera.position.z -= speed * 0.7
+      this.camera.position.x += speed * 0.7
+      this.camera.position.z += speed * 0.7
     }
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) {
-      this.camera.position.x += speed * 0.7
-      this.camera.position.z += speed * 0.7
+      this.camera.position.x -= speed * 0.7
+      this.camera.position.z -= speed * 0.7
     }
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) {
-      this.camera.position.x -= speed * 0.7
-      this.camera.position.z += speed * 0.7
-    }
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) {
       this.camera.position.x += speed * 0.7
       this.camera.position.z -= speed * 0.7
+    }
+    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) {
+      this.camera.position.x -= speed * 0.7
+      this.camera.position.z += speed * 0.7
     }
 
     // Clamp camera to map bounds
